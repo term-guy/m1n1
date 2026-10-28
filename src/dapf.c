@@ -181,6 +181,13 @@ int dapf_init_all(void)
     int count = 0;
     struct entry *entry = dapf_entries;
 
+    // M5: these DARTs all point their DAPF reg at a shared block (0x380714000)
+    // that SErrors on write. Skip until the M5 DAPF layout is understood.
+    if (chip_id == T8142) {
+        printf("dapf: skipping DAPF init on T8142\n");
+        return 0;
+    }
+
     while (entry->path != NULL) {
         if (adt_path_offset(adt, entry->path) < 0) {
             entry++;
