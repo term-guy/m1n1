@@ -181,11 +181,14 @@ int dapf_init_all(void)
     int count = 0;
     struct entry *entry = dapf_entries;
 
-    // M5: these DARTs all point their DAPF reg at a shared block (0x380714000)
-    // that SErrors on write. Skip until the M5 DAPF layout is understood.
+    // M5: the dart-aop/dart-pmp/dart-isp DAPF regs are a shared block
+    // (0x380714000) that SErrors on write, so only program dart-mtp, whose
+    // reg[1] is its own DAPF (0x394810000); the MTP (keyboard/trackpad) does
+    // not boot without it.
     if (chip_id == T8142) {
-        printf("dapf: skipping DAPF init on T8142\n");
-        return 0;
+        if (dapf_init("/arm-io/dart-mtp", 1) < 0)
+            return -1;
+        return 1;
     }
 
     while (entry->path != NULL) {
