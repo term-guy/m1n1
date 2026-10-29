@@ -7,6 +7,7 @@
 #include "assert.h"
 #include "clk.h"
 #include "dapf.h"
+#include "wdt.h"
 #include "devicetree.h"
 #include "display.h"
 #include "exception.h"
@@ -2840,6 +2841,20 @@ int kboot_prepare_dt(void *fdt)
             printf("WARNING: M4+ SMP-RO is large (48KB)");
         if (fdt_add_mem_rsv(dt, ro_start, ro_end - ro_start))
             bail("FDT: couldn't add reservation for M4+ SMP-RO CTRR area\n");
+
+        // M5: the secondaries also write-protect the CTRR_D window just
+        // below the m1n1 that iBoot loaded; Linux writing a page there from
+        // a secondary takes a permission fault. UPR is the last protected 4K
+        // page; round out to 16K pages.
+        u64 d_lwr = mrs(SYS_IMP_APL_CTRR_D_LWR_EL1);
+        u64 d_upr = mrs(SYS_IMP_APL_CTRR_D_UPR_EL1);
+        if (chip_id == T8142 && d_lwr && d_upr >= d_lwr) {
+            u64 d_start = ALIGN_DOWN(d_lwr, SZ_16K);
+            u64 d_end = ALIGN_UP(d_upr + SZ_4K, SZ_16K);
+            printf("FDT: reserving M5 CTRR_D area 0x%lx..0x%lx\n", d_start, d_end);
+            if (fdt_add_mem_rsv(dt, d_start, d_end - d_start))
+                bail("FDT: couldn't add reservation for M5 CTRR_D area\n");
+        }
     }
 
     /* setup console log buffer early to capture as much log as possible */
@@ -2934,13 +2949,23 @@ int kboot_prepare_dt(void *fdt)
 
 int kboot_boot(void *kernel)
 {
-    mcc_enable_cache();
-    tunables_apply_static();
-    clk_init();
+    if (chip_id == T8142) {
+        // M5 bring-up: the cache/tunables/clk/usb/pcie steps are untested on
+        // T8142 and Linux boots without them; only the MTP DAPF is needed.
+        // Arm the WDT so a hang before Linux's apple_wdt and systemd take it
+        // over resets the Mac instead of leaving it stuck.
+        printf("kboot: T8142: skipping mcc/tunables/clk/usb/pcie init\n");
+        dapf_init_all();
+        wdt_arm(60);
+    } else {
+        mcc_enable_cache();
+        tunables_apply_static();
+        clk_init();
 
-    usb_init();
-    pcie_init();
-    dapf_init_all();
+        usb_init();
+        pcie_init();
+        dapf_init_all();
+    }
 
     printf("Setting SMP mode to WFE...\n");
     smp_set_wfe_mode(true);
