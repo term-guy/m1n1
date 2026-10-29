@@ -71,6 +71,36 @@ void get_device_info(void)
     printf("\n");
 }
 
+#ifndef BRINGUP
+#define T8142_PROXY_TIMEOUT 3
+
+static bool wait_for_proxy(int timeout)
+{
+    printf("Waiting for proxy connection... ");
+    for (int i = 0; i < timeout * 100; i++) {
+        for (int j = 0; j < USB_IODEV_COUNT; j++) {
+            iodev_id_t iodev = IODEV_USB0 + j;
+
+            if (!(iodev_get_usage(iodev) & USAGE_UARTPROXY))
+                continue;
+
+            usb_iodev_vuart_setup(iodev);
+            iodev_handle_events(iodev);
+            if (iodev_can_write(iodev) || iodev_can_write(IODEV_USB_VUART)) {
+                printf(" Connected!\n");
+                return true;
+            }
+        }
+
+        mdelay(10);
+        if (i % 100 == 99)
+            printf(".");
+    }
+    printf(" Timed out\n");
+    return false;
+}
+#endif
+
 void run_actions(__maybe_unused u64 lp_sip0)
 {
     bool usb_up = false;
@@ -85,30 +115,28 @@ void run_actions(__maybe_unused u64 lp_sip0)
 
         usb_up = true;
 
-        printf("Waiting for proxy connection... ");
-        for (int i = 0; i < EARLY_PROXY_TIMEOUT * 100; i++) {
-            for (int j = 0; j < USB_IODEV_COUNT; j++) {
-                iodev_id_t iodev = IODEV_USB0 + j;
-
-                if (!(iodev_get_usage(iodev) & USAGE_UARTPROXY))
-                    continue;
-
-                usb_iodev_vuart_setup(iodev);
-                iodev_handle_events(iodev);
-                if (iodev_can_write(iodev) || iodev_can_write(IODEV_USB_VUART)) {
-                    printf(" Connected!\n");
-                    uartproxy_run(NULL);
-                    return;
-                }
-            }
-
-            mdelay(10);
-            if (i % 100 == 99)
-                printf(".");
+        if (wait_for_proxy(EARLY_PROXY_TIMEOUT)) {
+            uartproxy_run(NULL);
+            return;
         }
-        printf(" Timed out\n");
     }
 #endif
+
+    // M5: the installed m1n1 boots its payload by default; give the host a short window to
+    // grab the proxy first so the machine stays reachable for development.
+    if (chip_id == T8142 && !usb_up) {
+        printf("T8142: bringing up USB for a %d s proxy window...\n", T8142_PROXY_TIMEOUT);
+
+        usb_init();
+        usb_iodev_init();
+
+        usb_up = true;
+
+        if (wait_for_proxy(T8142_PROXY_TIMEOUT)) {
+            uartproxy_run(NULL);
+            return;
+        }
+    }
 #endif
 
     printf("Checking for payloads...\n");
