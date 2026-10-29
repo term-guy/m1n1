@@ -48,6 +48,19 @@ void wdt_disable(void)
     }
 }
 
+/* Arm the primary WDT to reset the SoC after `seconds` (24 MHz counter). */
+void wdt_arm(u32 seconds)
+{
+    if (!wdt_base)
+        return;
+
+    write32(wdt_base + WDT_CTL, 0);
+    write32(wdt_base + WDT_ALARM, seconds * 24000000);
+    write32(wdt_base + WDT_COUNT, 0);
+    write32(wdt_base + WDT_CTL, 4);
+    printf("Primary WDT armed for %u s\n", seconds);
+}
+
 void wdt_reboot(void)
 {
     if (!wdt_base)
