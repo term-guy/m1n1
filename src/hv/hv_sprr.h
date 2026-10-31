@@ -278,6 +278,7 @@ enum hv_vreg {
     HV_VREG_S3_4_C1_C2_5,
     HV_VREG_S3_5_C15_C11_2,
     HV_VREG_S3_5_C15_C1_6,
+    HV_VREG_S3_5_C15_C2_6,
     HV_VREG_S3_5_C15_C3_6,
     HV_VREG_S3_5_C15_C3_7,
     HV_VREG_S3_5_C15_C6_2,
