@@ -1199,6 +1199,19 @@ static void sprr_trace_ctrr(u32 vreg, bool is_read, bool guarded, u64 value)
         printf("hv_ctrr: cpu=%u op=%c trace limit reached\n", cpu, is_read ? 'R' : 'W');
 }
 
+/* T8142 XNU reads the D region through EL2 after SPTM programs EL1. */
+static u32 sprr_ctrr_read_view(u32 vreg, bool is_read, bool guarded)
+{
+    if (chip_id != T8142 || !is_read || guarded)
+        return vreg;
+
+    switch (vreg) {
+        case HV_VREG_CTRR_D_LWR_EL2: return HV_VREG_CTRR_D_LWR_EL1;
+        case HV_VREG_CTRR_D_UPR_EL2: return HV_VREG_CTRR_D_UPR_EL1;
+        default: return vreg;
+    }
+}
+
 static bool hv_sprr_emulate_sysreg(struct exc_info *ctx, u32 vreg, bool is_read, u32 rt,
                                    bool locked)
 {
@@ -1207,6 +1220,8 @@ static bool hv_sprr_emulate_sysreg(struct exc_info *ctx, u32 vreg, bool is_read,
     ctx->regs[31] = 0;
     u64 wval = ctx->regs[rt];
     u64 rval = 0;
+    u32 access_vreg = vreg;
+    vreg = sprr_ctrr_read_view(vreg, is_read, cpu->guarded);
 
     switch (vreg) {
         VREG_STORED(HV_VREG_APCTL_EL12, apctl_el12);
@@ -1433,7 +1448,7 @@ static bool hv_sprr_emulate_sysreg(struct exc_info *ctx, u32 vreg, bool is_read,
             break;
     }
 
-    sprr_trace_ctrr(vreg, is_read, cpu->guarded, is_read ? rval : wval);
+    sprr_trace_ctrr(access_vreg, is_read, cpu->guarded, is_read ? rval : wval);
 
     if (is_read)
         ctx->regs[rt] = rval;
