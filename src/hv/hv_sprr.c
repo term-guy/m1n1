@@ -1178,6 +1178,27 @@ static bool hv_gxf_gexit(struct exc_info *ctx)
             cpu->field = wval;                                                                     \
         break
 
+/* Bounded T8142 diagnostics; register behavior remains unchanged. */
+static u8 sprr_ctrr_trace_count[MAX_CPUS][2];
+
+static void sprr_trace_ctrr(u32 vreg, bool is_read, bool guarded, u64 value)
+{
+    if (chip_id != T8142 || vreg < HV_VREG_CTRR_A_CTL_EL1 ||
+        vreg > HV_VREG_CTRR_LOCK_EL12)
+        return;
+
+    u32 cpu = smp_id();
+    /* Separate budgets keep a polling read from hiding subsequent writes. */
+    u8 *count = &sprr_ctrr_trace_count[cpu][is_read];
+    if (*count >= 64)
+        return;
+    ++*count;
+    printf("hv_ctrr: cpu=%u guarded=%u op=%c vreg=%u value=0x%lx\n",
+           cpu, guarded, is_read ? 'R' : 'W', vreg, value);
+    if (*count == 64)
+        printf("hv_ctrr: cpu=%u op=%c trace limit reached\n", cpu, is_read ? 'R' : 'W');
+}
+
 static bool hv_sprr_emulate_sysreg(struct exc_info *ctx, u32 vreg, bool is_read, u32 rt,
                                    bool locked)
 {
@@ -1411,6 +1432,8 @@ static bool hv_sprr_emulate_sysreg(struct exc_info *ctx, u32 vreg, bool is_read,
                 cpu->shadow[vreg] = wval;
             break;
     }
+
+    sprr_trace_ctrr(vreg, is_read, cpu->guarded, is_read ? rval : wval);
 
     if (is_read)
         ctx->regs[rt] = rval;
