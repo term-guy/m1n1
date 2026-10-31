@@ -24,6 +24,10 @@ In **this fork only**, the owner has chosen to use LLM assistance. Therefore:
 - `m5-standalone`: work towards booting Linux from m1n1 without the host (T8142 only): program
   only dart-mtp's DAPF, reserve the CTRR_D window, skip the untested mcc/tunables/clk/usb/pcie
   kboot steps, arm the WDT before hand-off.
+- `m5-hv`: hypervisor test branch for running macOS under m1n1 on T8142 (tracing hardware,
+  e.g. GPU firmware messages): upstream `main` (SPTM/TXM hypervisor) + the `m5-standalone`
+  commits + T8142 hypervisor fixes (VREG, AMCC enable mask, CTRR D EL2 readback). Chainloaded
+  as a raw `.bin` from the stage-1 proxy, never installed as stage 1.
 
 The Mac runs an installed m1n1 built from 33c235dd (`33c235dd-dirty`). Keep the proxy client
 compatible with it.
