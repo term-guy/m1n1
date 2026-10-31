@@ -91,11 +91,14 @@ bool hv_amcc_init(void)
         ADT_GETPROP(adt, amcc_node, "plane-stride", &stride) != sizeof(stride))
         return false;
 
-    /* T8132 lists all controllers and has no enable-mask property. */
+    /*
+     * T8132 lists all controllers and has no enable-mask property; neither has
+     * T8142 (one controller, per-plane IRQs), so a missing mask means all.
+     */
     enabled = ~0U;
     if (!amcc_shared_irqs &&
         ADT_GETPROP(adt, error_handler_node, "amcc-enable-mask", &enabled) != sizeof(enabled))
-        return false;
+        enabled = ~0U;
 
     u32 irq_len;
     const u32 *irqs = adt_getprop(adt, error_handler_node, "interrupts", &irq_len);
